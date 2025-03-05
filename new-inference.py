@@ -22,7 +22,7 @@ for dirname, _, filenames in os.walk('/kaggle/input'):
         print(os.path.join(dirname, filename))
 
 #load dataset
-df = pd.read_csv('/home/umflint.edu/brayclou/First/Suicide_Detection.csv', header=0)
+df = pd.read_csv('/home/umflint.edu/brayclou/Github repo/Suicide_Detection.csv', header=0)
 #change labels to binary
 df['class'] = [0 if x == "non-suicide" else 1 for x in df['class']]
 #NOTE: why is train initialized but never used?  df holds the text features; the only relevant part for this exercise
@@ -68,7 +68,14 @@ try:
             break
         
         #TODO: Figure out what is wrong with txt here
+        #the variable underscore seems to be the 1-10 value
         _, txt, true = (pair[1].values)
+        # print("Printing txt")
+        # print(txt)
+        # print("printing true")
+        # print(true)
+        # print("Printing underscore?")
+        # print(_)
 
         #Does this not use a test set?
         #Correction: This is the preamble for the llm prompt that tells the llm what to do with the input
@@ -76,7 +83,6 @@ try:
         prompt = 'You are a professional psychiatrist, this is a comment from an imaginary patient, does he have suicidal thoughts? If yes, how dangerous is it on a scale from 1 to 10 (10 is the most dangerous)'
 
         #Seems to get the character count for the llm prompt appended with text/txt appended to it.
-        #TODO: Figure out what this is for
         offset = len((prompt + txt + '"\n'))
 
         #Same as above line for txt
