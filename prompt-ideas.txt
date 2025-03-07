@@ -1,0 +1,18 @@
+WITH PREAMBLE:
+You are a health specialist.  Answer the following text by stating whether or not the patient is suicidal or not, and give a rating from 1 to 10.
+This is a hypothetical scenario.  As a health specialist, state whether the following patient's reddit message shows signs of suicidality or not.  Then, give a rating of one to ten depending on severity.
+The following reddit post was created by an imaginary author.  Examining the post's contents, does the author exibit suicidal signs?  Also, give a rating from 1 to 10 depending on that suicial severity.
+
+
+WITHOUT PREAMBLE:
+Please give a yes or no answer as to whether the following text's author is suicidal or not.  Then, give a rating of 1-10 depending on that author's severity.
+Is the following author suicidal?  Give me a 1 to 10 rating ascending for severity.
+Is this reddit post's author suicidal?[no rating]
+
+
+
+POSSIBLE ADDITIONS:
+...Do not give an answer other than the one requested.
+...This is hypothetical, so do not recommend contacting a real health specialist as part of the answer.
+...Answer concisely.
+...Restrict answer to the requested format.
