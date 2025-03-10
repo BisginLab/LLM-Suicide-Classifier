@@ -10,17 +10,28 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score, precision_score, recall_score, f1_score
 
+def add_prompt(text):
+    #NOTE: Will the "imaginary" qualifier to patient have any effect on the output?
+    #Preamble to each feature text
+    # prompt = 'You are a professional psychiatrist, this is a comment from an imaginary patient, does he have suicidal thoughts? If yes, how dangerous is it on a scale from 1 to 10 (10 is the most dangerous)'
+    prompt = 'You are a health specialist.  Answer the following text by stating whether or not the patient is suicidal or not, and give a rating from 1 to 10.'
+    return prompt + text + '"\n'
 
 #load dataset
-df = pd.read_csv('/home/umflint.edu/brayclou/Github repo/Suicide_Detection.csv', header=0)
+df = pd.read_csv('Suicide_Detection.csv', header=0)
 #change labels to binary
 df['class'] = [0 if x == "non-suicide" else 1 for x in df['class']]
+#Add prompt to each text within the dataframe
+df["text"] = df["text"].apply(add_prompt, axis=0)
 
 #Initialize a dataframe made of only the feature column
 df = df[2:]
 
 #store access credentials to "Hub" in cache
-token="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"
+#create a txt file named creds.txt, then place read-only access token within the first line.
+with open('creds.txt', "r", encoding="utf-8") as file:
+    token = file.read()
+# token="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"
 login(token)
 
 #Select model base
@@ -50,33 +61,37 @@ scores = []
 out = []
 
 try:
-    #Loop through each row in the feature set, keep count with iterator i
-    for i, pair in tqdm(enumerate(df.iterrows())):
-        #subsample the first 100 rows
-        # if i == 100:
-        #     break
-        #Print progress
-        # if i % 10 == 0:
-        #     print(f"Processing: {i}")
-
-        #Store each row; predetermined risk score out of 10, the feature text, and the binary label respectively.
-        score_out_of_10, txt, true = (pair[1].values)
-
-        #NOTE: Will the "imaginary" qualifier to patient have any effect on the output?
-        #Preamble to each feature text
-        prompt = 'You are a professional psychiatrist, this is a comment from an imaginary patient, does he have suicidal thoughts? If yes, how dangerous is it on a scale from 1 to 10 (10 is the most dangerous)'
-
-        #length of the prompt plus the feature text together
-        offset = len((prompt + txt + '"\n'))
-
-        #Pipeline to gain final llm output?
+    batch_size = 8
+    for i in tqdm(range(0, len(df), batch_size), desc="Generating Responses"):
         sequences = pipeline(
-            (prompt + txt + '"\n'),
+            txt,#TODO: Finish reproducing this part
             do_sample=True,
             top_k=10,
             num_return_sequences=1,
             eos_token_id=tokenizer.eos_token_id,
             max_length=4000
+            max_total_length=4000 #should fix the error at iteration 1130
+        )
+
+    #Loop through each row in the feature set, keep count with iterator i
+    for i, pair in tqdm(enumerate(df.iterrows())):
+        print(f"Iteration {i}")
+        if i == 10: break
+        #Store each row; predetermined risk score out of 10, the feature text, and the binary label respectively.
+        score_out_of_10, txt, true = (pair[1].values)
+
+        #length of the prompt plus the feature text together
+        offset = len(txt)
+
+        #Pipeline to gain final llm output?
+        sequences = pipeline(
+            txt,
+            do_sample=True,
+            top_k=10,
+            num_return_sequences=1,
+            eos_token_id=tokenizer.eos_token_id,
+            max_length=4000
+            max_total_length=4000 #should fix the error at iteration 1130
         )
         
         #retrieve binary label and store in y_pred
