@@ -18,18 +18,18 @@ def add_prompt(text):
     return prompt + text + '"\n'
 
 #load dataset
-df = pd.read_csv('Suicide_Detection.csv', header=0)
+df = pd.read_csv('Github repo/Suicide_Detection.csv', header=0)
 #change labels to binary
 df['class'] = [0 if x == "non-suicide" else 1 for x in df['class']]
 #Add prompt to each text within the dataframe
-df["text"] = df["text"].apply(add_prompt, axis=0)
+df["text"] = df["text"].apply(add_prompt)
 
 #Initialize a dataframe made of only the feature column
 df = df[2:]
 
 #store access credentials to "Hub" in cache
 #create a txt file named creds.txt, then place read-only access token within the first line.
-with open('creds.txt', "r", encoding="utf-8") as file:
+with open('Github repo/creds.txt', "r", encoding="utf-8") as file:
     token = file.read()
 # token="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"
 login(token)
@@ -37,6 +37,7 @@ login(token)
 #Select model base
 # alt: model = "meta-llama/Llama-2-7b-chat-hf"
 model = "stabilityai/StableBeluga-7B"
+# model = "NEU-HAI/mental-alpaca"
 
 #looks like the token allows access to the pretrained tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model, token=token, trust_remote_code=True)
@@ -60,42 +61,12 @@ scores = []
 #combined output
 out = []
 
-try:
-    batch_size = 8
-    for i in tqdm(range(0, len(df), batch_size), desc="Generating Responses"):
-        sequences = pipeline(
-            txt,#TODO: Finish reproducing this part
-            do_sample=True,
-            top_k=10,
-            num_return_sequences=1,
-            eos_token_id=tokenizer.eos_token_id,
-            max_length=4000
-            max_total_length=4000 #should fix the error at iteration 1130
-        )
-
-    #Loop through each row in the feature set, keep count with iterator i
-    for i, pair in tqdm(enumerate(df.iterrows())):
-        print(f"Iteration {i}")
-        if i == 10: break
-        #Store each row; predetermined risk score out of 10, the feature text, and the binary label respectively.
-        score_out_of_10, txt, true = (pair[1].values)
-
-        #length of the prompt plus the feature text together
-        offset = len(txt)
-
-        #Pipeline to gain final llm output?
-        sequences = pipeline(
-            txt,
-            do_sample=True,
-            top_k=10,
-            num_return_sequences=1,
-            eos_token_id=tokenizer.eos_token_id,
-            max_length=4000
-            max_total_length=4000 #should fix the error at iteration 1130
-        )
-        
+def extract_preds(responses, texts, trues):
+    offset = []
+    for text, true, response in zip(texts, trues, responses):
+        offset = len(text)
         #retrieve binary label and store in y_pred
-        positive = re.findall(r'(?i)\byes\b', sequences[0]['generated_text'][offset:])
+        positive = re.findall(r'(?i)\byes\b', response[0]['generated_text'][offset:])
         if len(positive) >= 1:
             y_pred.append(1)
         else:
@@ -103,12 +74,37 @@ try:
         y.append(int(true))
         
         #store 1-10 prediction then append as integer to scores
-        for match in re.finditer(r'\b(\d)/10\b', sequences[0]['generated_text'][offset:]):
+        for match in re.finditer(r'\b(\d{1,2})/10\b', response[0]['generated_text'][offset:]):
             score = match.group(1)  # Extract the digit part of the score
             scores.append(int(score))
         
         #store output
-        out.append([(prompt+txt+'\n'), sequences[0]['generated_text'][offset:]])
+        out.append([(text), response[0]['generated_text'][offset:]])
+
+try:
+    batch_size = 8
+    for i in tqdm(range(0, len(df), batch_size), desc="Generating Responses"):
+        if i > 130: break
+        batch = df.iloc[i : i + batch_size]
+        txt = batch["text"].tolist()
+        true = batch["class"].tolist()
+        
+        sequences = pipeline(
+            txt,
+            do_sample=True,
+            top_k=10,
+            num_return_sequences=1,
+            eos_token_id=tokenizer.eos_token_id,
+            max_length=4000,
+            truncation=True,
+            # max_total_length=4000, #should fix the error at iteration 1130
+            batch_size=batch_size
+        )
+        extract_preds(sequences, txt, true)
+        print("Begin sequence sample:")
+        print(sequences[0])
+        
+
 except Exception as e:
     #output the error without damaging the process
     print("Error encountered:", e)
