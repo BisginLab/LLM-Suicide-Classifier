@@ -18,7 +18,7 @@ def add_prompt(text):
     return prompt + text + '"\n'
 
 #load dataset
-df = pd.read_csv('Github repo/Suicide_Detection.csv', header=0)
+df = pd.read_csv('~/Github repo/Suicide_Detection.csv', header=0)
 #change labels to binary
 df['class'] = [0 if x == "non-suicide" else 1 for x in df['class']]
 #Add prompt to each text within the dataframe
@@ -29,7 +29,8 @@ df = df[2:]
 
 #store access credentials to "Hub" in cache
 #create a txt file named creds.txt, then place read-only access token within the first line.
-with open('Github repo/creds.txt', "r", encoding="utf-8") as file:
+#NOTE: check out the os library
+with open('/home/umflint.edu/brayclou/Github repo/creds.txt', "r", encoding="utf-8") as file:
     token = file.read()
 # token="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"
 login(token)
@@ -38,6 +39,7 @@ login(token)
 # alt: model = "meta-llama/Llama-2-7b-chat-hf"
 model = "stabilityai/StableBeluga-7B"
 # model = "NEU-HAI/mental-alpaca"
+# model = "perplexity-ai/r1-1776"
 
 #looks like the token allows access to the pretrained tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model, token=token, trust_remote_code=True)
@@ -47,9 +49,10 @@ pipeline = transformers.pipeline(
     "text-generation",
     model=model,
     torch_dtype=torch.float16,
-    device=0,
+    # device=0,
     trust_remote_code=True
 )
+pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
 
 #initialize variables outside for loop scope
 #list of actual binary label
@@ -61,32 +64,19 @@ scores = []
 #combined output
 out = []
 
-def extract_preds(responses, texts, trues):
-    offset = []
-    for text, true, response in zip(texts, trues, responses):
-        offset = len(text)
-        #retrieve binary label and store in y_pred
-        positive = re.findall(r'(?i)\byes\b', response[0]['generated_text'][offset:])
-        if len(positive) >= 1:
-            y_pred.append(1)
-        else:
-            y_pred.append(0)
-        y.append(int(true))
-        
-        #store 1-10 prediction then append as integer to scores
-        for match in re.finditer(r'\b(\d{1,2})/10\b', response[0]['generated_text'][offset:]):
-            score = match.group(1)  # Extract the digit part of the score
-            scores.append(int(score))
-        
-        #store output
-        out.append([(text), response[0]['generated_text'][offset:]])
+torch.cuda.empty_cache()
+torch.cuda.synchronize()
 
 try:
-    batch_size = 8
+    batch_size = 4
     for i in tqdm(range(0, len(df), batch_size), desc="Generating Responses"):
         if i > 130: break
         batch = df.iloc[i : i + batch_size]
-        txt = batch["text"].tolist()
+        # txt = batch["text"].tolist()
+        txt = [t for t in batch["text"].tolist() if isinstance(t, str) and len(t.strip()) > 0]
+        if len(txt) == 0:
+            print("Warning: Empty batch detected. Skipping iteration:", i)
+            continue
         true = batch["class"].tolist()
         
         sequences = pipeline(
@@ -100,14 +90,38 @@ try:
             # max_total_length=4000, #should fix the error at iteration 1130
             batch_size=batch_size
         )
-        extract_preds(sequences, txt, true)
         print("Begin sequence sample:")
         print(sequences[0])
+
+        for text, true1, response in zip(txt, true, sequences):
+            output_text = response[0]['generated_text'][len(text):].strip
+
+            #retrieve binary label and store in y_pred
+            positive = re.findall(r'(?i)\byes\b', output_text)
+            if len(positive) >= 1:
+                y_pred.append(1)
+            else:
+                y_pred.append(0)
+            y.append(int(true1))
+            
+            #store 1-10 prediction then append as integer to scores
+            for match in re.finditer(r'\b(\d{1,2})/10\b', output_text):
+                score = match.group(1)  # Extract the digit part of the score
+                scores.append(int(score))
+            
+            #store output
+            print("appending to out")
+            out.append([(text), output_text])
         
 
 except Exception as e:
     #output the error without damaging the process
     print("Error encountered:", e)
+
+if len(y) == 0 or len(y_pred) == 0:
+    print("Error: No valid predictions. Using placeholder labels.")
+    y = [0]
+    y_pred = [0]
 
 #convert binary to numpy array
 y = np.array(y)
@@ -126,4 +140,4 @@ plt.show()
 
 #Save the results(or the predictions?) to a csv named preds.csv
 my_df = pd.DataFrame(out)
-my_df.to_csv('Github repo/preds.csv', index=False, header=False)
+my_df.to_csv('/home/umflint.edu/brayclou/Github repo/preds.csv', index=False, header=False)
