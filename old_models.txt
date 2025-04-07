@@ -1,0 +1,10 @@
+#Working Models
+model = "stabilityai/StableBeluga-7B"
+# model = "medicalai/ClinicalGPT-base-zh"#NOTE: Works, but the responses are genuinely terrible.  Cycles between arguing with itself and just building a narrative off the suicidal post.
+# model = ("EleutherAI/gpt-neo-2.7B") NOTE: Works, but argues with itself
+
+#NOTE: explore the paid versions for gpt over the next week
+
+#to be used models
+# model = "meta-llama/Llama-2-7b-chat-hf" #NOTE: need to request access
+# model="google/flan-t5-small"

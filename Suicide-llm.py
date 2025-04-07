@@ -9,9 +9,10 @@ import re
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score, precision_score, recall_score, f1_score
-import openai
- 
-openai.api_key = os.environ["OPENAI_API_KEY"]
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
 
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
 torch.cuda.empty_cache()
@@ -34,35 +35,21 @@ df["text"] = df["text"].apply(add_prompt)
 
 #Initialize a dataframe made of only the feature column
 df = df[2:]
+print("Dataset Loaded...")
 
-#store access credentials to "Hub" in cache
-#create a txt file named creds.txt, then place read-only access token within the first line.
-#NOTE: check out the os library
-with open('/home/umflint.edu/brayclou/Github repo/creds.txt', "r", encoding="utf-8") as file:
-    token = file.read()
-# token="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"
-login(token)
-
-model = 
-
-#looks like the token allows access to the pretrained tokenizer
-tokenizer = AutoTokenizer.from_pretrained(model, token=token, trust_remote_code=True, padding_side='left')
-
-tokenizer.padding_side = "left"
-tokenizer.pad_token = tokenizer.eos_token
-
-#Initialize transformers pipeline using selected model, set to gpu
-print("Beginning Pipeline init")
-pipeline = transformers.pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    torch_dtype=torch.bfloat16,
-    device=0,
-    trust_remote_code=True
+client = OpenAI(
+    # This is the default and can be omitted
+    api_key=os.environ.get("OPENAI_API_KEY"),
 )
-pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
-print("Pipeline Initialized")
+
+response = client.responses.create(
+    model="gpt-4o",
+    instructions='You are a health specialist. Give a rating from 1 to 10, depending on whether the following message indicates that its author is suicidal, 1 being not at all, and 10 being extremely suicidal.  Format the rating as number/10.  ',
+    input="How do I check if a Python object is an instance of a class?",
+)
+
+print(response.output_text)
+
 exit()
 
 #initialize variables outside for loop scope
