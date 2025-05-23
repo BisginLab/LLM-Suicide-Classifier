@@ -12,6 +12,9 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_s
 from dotenv import load_dotenv
 from openai import OpenAI
 
+#This is the gpt api version of general_classifier.py.  It was built somewhat before the general classifier, but only the
+#minimum should be changed.
+
 load_dotenv()
 
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
@@ -42,16 +45,6 @@ client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
 
-response = client.responses.create(
-    model="gpt-4o",
-    instructions='You are a health specialist. Give a rating from 1 to 10, depending on whether the following message indicates that its author is suicidal, 1 being not at all, and 10 being extremely suicidal.  Format the rating as number/10.  ',
-    input="How do I check if a Python object is an instance of a class?",
-)
-
-print(response.output_text)
-
-exit()
-
 #initialize variables outside for loop scope
 #list of actual binary label
 y = []
@@ -62,11 +55,22 @@ scores = []
 #combined output
 out = []
 
+def get_preds(input_text):
+    # Get the model's prediction
+    response = client.responses.create(
+        model="gpt-4o",
+        instructions='You are a health specialist. Give a rating from 1 to 10, ' \
+                        'depending on whether the following message indicates that its author is suicidal, ' \
+                        '1 being not at all, and 10 being extremely suicidal.  Format the rating as number/10.  ',
+        input=input_text,
+    )
+    return response.output_text
+
 try:
-    batch_size = 4
-    sub_size = 50
+    batch_size = 8
+    sub_size = 40
     threshold = 6
-    sub_df = df.iloc[0 : sub_size]
+    sub_df = df#.iloc[0 : sub_size] #NOTE: This line is commented out to process the entire dataset
     for i in tqdm(range(0, len(sub_df), batch_size), desc="Generating Responses"):
         # if i > sub_size: break
         batch = sub_df.iloc[i : i + batch_size]
@@ -76,30 +80,26 @@ try:
             continue
         true = batch["class"].tolist()
 
-        with torch.no_grad(): #torch.autograd.set_detect_anomaly(True)
-            sequences = pipeline(
-                txt,
-                do_sample=True,
-                top_k=10,
-                num_return_sequences=1,
-                eos_token_id=tokenizer.eos_token_id,
-                max_new_tokens=100,
-                # max_length=100,
-                truncation=True,
-                batch_size=batch_size
-            )
+        sequences = batch["text"].apply(get_preds)
+
         for text, true1, response in zip(txt, true, sequences):
-            output_text = response[0]['generated_text'][len(text):].strip()
+            
+            #if the response triggers gpt's apology message, return a max score of 10
+            if re.search(r".*sorry.*feeling this way.*", response, re.IGNORECASE):
+                output_text = "10/10"
+            else:
+                output_text = response
             
             #store 1-10 prediction then append as integer to scores
             for match in re.finditer(r'\b(\d{1,2})/10\b', output_text):
                 score = match.group(1)  # Extract the digit part of the score
                 scores.append(int(score))
             
-                if int(score) >= threshold:
-                    y_pred.append(1)
-                else:
-                    y_pred.append(0)
+                # if int(score) >= threshold:
+                #     y_pred.append(1)
+                # else:
+                #     y_pred.append(0)
+                y_pred.append(int(score)/10)
                 y.append(int(true1))
 
             #store output
@@ -120,15 +120,20 @@ y = np.array(y)
 y_pred = np.array(y_pred)
 
 #Get prediction results
-print("Accuracy: ",accuracy_score(y, y_pred))
-print("Precision: ",precision_score(y, y_pred))
-print("Recall: ",recall_score(y, y_pred))
-print("F1: ",f1_score(y, y_pred))
+# print("Accuracy: ",accuracy_score(y, y_pred))
+# print("Precision: ",precision_score(y, y_pred))
+# print("Recall: ",recall_score(y, y_pred))
+# print("F1: ",f1_score(y, y_pred))
 # print out the failed results
 
 print(f"True answers:      {y}")
 print(f"Predicted answers: {y_pred}")    
+pred_labels = pd.DataFrame(columns=['True', 'Predicted'])
+pred_labels['True'] = y
+pred_labels['Predicted'] = y_pred
+# pred_labels.to_csv('~/Github repo/pred_labels.csv', index=False)
+pred_labels.to_csv('~/Github repo/pred_scale_labels.csv', index=False)
 
 #Save the results(or the predictions?) to a csv named preds.csv
 my_df = pd.DataFrame(out)
-my_df.to_csv('/home/umflint.edu/brayclou/Github repo/preds.csv', index=False, header=False)
+# my_df.to_csv('/home/umflint.edu/brayclou/Github repo/pred_texts.csv', index=False, header=False)

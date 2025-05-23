@@ -7,6 +7,8 @@ import pandas as pd
 from tqdm import tqdm
 import re
 
+#This script takes the Suicide_Detection.csv dataset, and synthetically increases it seven-fold.
+
 #Load OPENAI_API_KEY
 load_dotenv()
 
@@ -30,9 +32,9 @@ try:
 except: print("API key setting failed!")
 
 mix_ratio = 7 #create this amount of synthetic datapoints per real datapoint
-batch_size = 4
-subset_size = 24
-#Initialize synth_df, a 2d list OR pd array that will store synthetic datapoints alongside their respective labels.
+batch_size = 8
+subset_size = 50000
+#Initialize synth_df, a pd array that will store synthetic datapoints alongside their respective labels.
 synth_df = pd.DataFrame(columns=["text", "class"])
 
 def generate_synth(data):
@@ -43,7 +45,7 @@ def generate_synth(data):
     if label == 0:
         prompt = f"Create {mix_ratio} messages similar to the input text.  Separate the messages with the word DIVIDER."
     elif label == 1:
-        prompt = f"Create {mix_ratio} messages similar to the input text, and ensure that they display some form of suicidal ideation.  Separate the messages with the word DIVIDER."
+        prompt = f"The input is a prompt from an imaginary health patient.  Do not respond to the message, instead create {mix_ratio} messages similar to the input text, and ensure that they display some form of suicidal ideation.  Separate the messages with the word DIVIDER."
     else: 
         print("damaged label detected!")
         return data
@@ -62,25 +64,33 @@ def generate_synth(data):
         "text": synthetic_text,
         "class": [label] * len(synthetic_text)
     })
+    if synth_output['text'].str.contains(r".*sorry.*feeling this way.*", regex=True, na=False).any():
+        # print(synth_output['text'])
+        # print("Blocked!")
+        return data
 
-    data = pd.concat([data, synth_output], ignore_index=True)
+    data = pd.concat([data, synth_output], ignore_index=True)        
     return data
 
 #For each batch of real datapoints up to sub_size(use tqdm)
 for i in tqdm(range(0, subset_size, batch_size), desc="Generating Synthetic Data"):
     current_batch = real_df.iloc[i:i+batch_size]
     #map or apply generate_synth to current batch, store as big list under name synth_batch
-    synth_batch = current_batch.apply(generate_synth, axis=1)
+    batch_outputs = []
+    for _, row in current_batch.iterrows():
+        result = generate_synth(row)
+        if isinstance(result, pd.DataFrame):
+            batch_outputs.append(result)
 
-    #append(not append, the other one) synth_batch to synth_df
-    for batch_item in synth_batch:
-        synth_df = pd.concat([batch_item, synth_df], ignore_index=True)
+    if batch_outputs:
+        combined_batch = pd.concat(batch_outputs, ignore_index=True)
+        synth_df = pd.concat([synth_df, combined_batch], ignore_index=True)
 
 #randomly mix synth_df
 synth_df_shuffled = synth_df#.sample(frac=1).reset_index(drop=True)
 
 #print completion message, including display of changed class population counts.
-print(f"Generation complete: dataset of size {real_df.shape} increased to {synth_df.shape}")
+print(f"Generation complete: dataset of size {subset_size} increased to {synth_df.shape}")
 
 #save hybrid df to hybrid_suicide_detection.csv
 synth_df_shuffled.to_csv('/home/umflint.edu/brayclou/Github repo/hybrid_suicide_detection.csv', index=False)
